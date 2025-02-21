@@ -12,7 +12,11 @@ app.use(helmet());
 app.use(morgan("dev"));
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: [
+      "http://localhost:5173",
+      "https://task-manager-38.web.app",
+      "https://task-manager-38.firebaseapp.com",
+    ],
   })
 );
 
@@ -35,13 +39,15 @@ async function run() {
     const usersCollection = db.collection("users");
     const taskCollection = db.collection("tasks");
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
+    // await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
-
+    app.get("/", (req, res) => {
+      res.send("Task manager homepage");
+    });
     app.post("/auth/login", async (req, res) => {
       const user = req.body || {};
 
@@ -130,11 +136,25 @@ async function run() {
           ])
           .toArray();
 
+        // Ensure all categories are included
+        const categories = ["todo", "inProgress", "done"];
+
+        const formattedTasks = categories.map((category) => {
+          const categoryTasks = tasks.find(
+            (task) => task.category === category
+          );
+
+          return {
+            category,
+            tasks: categoryTasks ? categoryTasks.tasks : [],
+          };
+        });
+
         res.status(200).json({
           success: true,
           error: false,
           message: "Tasks retrieved successfully",
-          data: tasks,
+          data: formattedTasks,
         });
       } catch (error) {
         console.log(error);
@@ -165,6 +185,117 @@ async function run() {
           success: false,
           error: true,
           message: "Failed to delete task",
+        });
+      }
+    });
+
+    // update a task
+
+    app.put("/tasks/update/:id", async (req, res) => {
+      const id = req.params?.id;
+      const task = req.body;
+
+      if (!task || !id) {
+        return res.status(404).send({
+          error: true,
+          message: "task not found",
+        });
+      }
+
+      task.modified = new Date(task.modified);
+
+      const filter = { _id: new ObjectId(id) };
+
+      const updateDoc = {
+        $set: task,
+      };
+
+      try {
+        const result = await taskCollection.findOneAndUpdate(
+          filter,
+          updateDoc,
+          { returnDocument: "after" }
+        );
+        console.log(result);
+        res.status(201).send({
+          success: true,
+          error: false,
+          message: "Successfully updated the task",
+          data: result,
+        });
+      } catch (error) {
+        console.log(error);
+        res.status(500).send({
+          success: false,
+          error: true,
+          message: "Failed to update task",
+        });
+      }
+    });
+
+    // update category for drag and drop
+
+    app.put("/tasks/dnd/:_id", async (req, res) => {
+      const id = req.params?._id;
+      const task = req.body;
+
+      if (!task || !id) {
+        return res.status(404).send({
+          error: true,
+          message: "task not found",
+        });
+      }
+      const filter = { _id: new ObjectId(id) };
+
+      const updateDoc = {
+        $set: { category: task.category },
+      };
+
+      try {
+        const result = await taskCollection.findOneAndUpdate(
+          filter,
+          updateDoc,
+          { returnDocument: "after" }
+        );
+        res.status(201).send({
+          success: true,
+          error: false,
+          message: "Successfully updated the task",
+          data: result,
+        });
+      } catch (error) {
+        res.status(500).send({
+          success: false,
+          error: true,
+          message: "Failed to update task",
+        });
+      }
+    });
+
+    // get a single task
+    app.get("/tasks/single-task/:id", async (req, res) => {
+      const id = req.params?.id;
+
+      if (!id) {
+        return res.status(404).send({
+          error: true,
+          message: "task not found",
+        });
+      }
+
+      try {
+        const result = await taskCollection.findOne({ _id: new ObjectId(id) });
+        res.status(201).send({
+          success: true,
+          error: false,
+          message: "Successfully got the task",
+          data: result,
+        });
+      } catch {
+        res.status(500).send({
+          success: false,
+          error: true,
+          message: "Failed to update task",
         });
       }
     });
