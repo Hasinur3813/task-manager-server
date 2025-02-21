@@ -3,6 +3,8 @@ const dotenv = require("dotenv");
 const helmet = require("helmet");
 const morgan = require("morgan");
 const cors = require("cors");
+const { createServer } = require("http");
+const { Server } = require("socket.io");
 
 const port = process.env.PORT || 3000;
 const app = express();
@@ -10,15 +12,18 @@ dotenv.config();
 app.use(express.json());
 app.use(helmet());
 app.use(morgan("dev"));
-app.use(
-  cors({
+app.use(cors());
+const server = createServer(app);
+const io = new Server(server, {
+  cors: {
     origin: [
       "http://localhost:5173",
       "https://task-manager-38.web.app",
       "https://task-manager-38.firebaseapp.com",
     ],
-  })
-);
+    methods: ["GET", "POST"],
+  },
+});
 
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const uri = `mongodb+srv://${process.env.MONGODB_USERNAME}:${process.env.MONGODB_PASSWORD}@cluster0.0b1vd.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
@@ -45,6 +50,13 @@ async function run() {
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
+
+    const changesStream = taskCollection.watch();
+    changesStream.on("change", (change) => {
+      console.log("changes detected", change);
+      io.emit("taskUpdated", change);
+    });
+
     app.get("/", (req, res) => {
       res.send("Task manager homepage");
     });
@@ -136,7 +148,6 @@ async function run() {
           ])
           .toArray();
 
-        // Ensure all categories are included
         const categories = ["todo", "inProgress", "done"];
 
         const formattedTasks = categories.map((category) => {
@@ -307,6 +318,6 @@ async function run() {
 }
 run().catch(console.dir);
 
-app.listen(port, () => {
+server.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
