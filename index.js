@@ -245,17 +245,18 @@ async function run() {
           message: "task not found",
         });
       }
+      task.modified = new Date(task.modified);
       const filter = { _id: new ObjectId(id) };
 
       const updateDoc = {
-        $set: { category: task.category },
+        $set: { category: task.category, modified: task.modified },
       };
 
       try {
         const result = await taskCollection.findOneAndUpdate(
           filter,
           updateDoc,
-          { returnDocument: "after" }
+          { upsert: true, returnDocument: "after" }
         );
         res.status(201).send({
           success: true,
